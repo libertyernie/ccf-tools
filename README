@@ -2,6 +2,8 @@ Wii Virtual Console 'CCF' archiver/extractor suite
 by paulguy/aeduo (paulguy one one nine at gmail dot com)  released under Public 
 Domain, but I ask that you give credit if you use any of the code.
 
+Tweaks made by libertyernie (2021-03-14) (these are public domain also).
+
 This package contains these files:
 README - this readme
 ccfex.c - CCF extractor source

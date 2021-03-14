@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include "zlib.h"
@@ -15,18 +16,18 @@ typedef struct ccffile {
 	// The filename (null-padded ASCII)
 	char filename[20];
 	// The offset of the file's data with respect to the beginning of the CCF archive, in multiples of the chunk size in the archive's main header.
-	unsigned int offset;
+	uint32_t offset;
 	// The number of bytes the file's data takes up within the archive.
-	unsigned int datasize;
+	uint32_t datasize;
 	// The number of bytes the file's data will take up once decompressed.
-	unsigned int filesize;
+	uint32_t filesize;
 } ccffile;
 
 int main(int argc, char **argv) {
 	ccffile **fileentries;
 	FILE *infile, *outfile;
 	int retval;
-	unsigned int files, size, curpos, i, j;
+	uint32_t files, size, curpos, i, j;
 	char *indata, *outdata;
 
 	// Ensure that there is an argument
@@ -119,7 +120,7 @@ int main(int argc, char **argv) {
 
 		// Retrieve the buffer size
 		long datasize = (long)fileentries[i]->datasize;
-		// Perform compression, telling zlib to put the correct compressed size in the correct place in the header
+		// Perform compression, telling zlib to put the correct compressed size into the "datasize" variable
 		retval = compress(outdata, &datasize, indata, fileentries[i]->filesize);
 		switch(retval) {
 			case Z_OK:
@@ -135,7 +136,11 @@ int main(int argc, char **argv) {
 				return(EXIT_FAILURE);
 		}
 
-		// Ensure that the compressed size is 32 bits
+		// Copy the actual compressed data size to the CCF file descriptor
+		if (datasize > 0xFFFFFFFF) {
+			fprintf(stderr, "Compressed file too large!\n");
+			return(EXIT_FAILURE);
+		}
 		fileentries[i]->datasize = datasize & 0xFFFFFFFF;
 		// Check whether the file became smaller
 		if(fileentries[i]->datasize > fileentries[i]->filesize) {

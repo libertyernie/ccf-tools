@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include "zlib.h"
@@ -11,11 +12,11 @@ typedef struct ccffile {
 	// The filename (null-padded ASCII)
 	char filename[20];
 	// The offset of the file's data with respect to the beginning of the CCF archive, in multiples of the chunk size in the archive's main header.
-	unsigned int offset;
+	uint32_t offset;
 	// The number of bytes the file's data takes up within the archive.
-	unsigned int datasize;
+	uint32_t datasize;
 	// The number of bytes the file's data will take up once decompressed.
-	unsigned int filesize;
+	uint32_t filesize;
 } ccffile;
 
 int main(int argc, char **argv) {
@@ -34,7 +35,7 @@ int main(int argc, char **argv) {
 	}
 
 	// Local variables
-	unsigned int magic, chunksize, filecount, i;
+	uint32_t magic, chunksize, filecount, i;
 	// A list of file descriptors
 	ccffile **fileentries;
 	// A buffer on the stack for reading filenames from the file descriptor that will always have a null terminator after 20 characters
