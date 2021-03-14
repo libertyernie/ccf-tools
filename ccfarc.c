@@ -66,6 +66,8 @@ int main(int argc, char **argv) {
 		if(t > 20) {
 			t = 20;
 		}
+		// Make sure any unused bytes are zero before writing the filename to the header
+		memset(fileentries[i]->filename, '\0', 20);
 		memcpy(fileentries[i]->filename, argv[i + 1], t);
 		// Open the input file stream
 		infile = fopen(argv[i + 1], "rb");
@@ -151,11 +153,13 @@ int main(int argc, char **argv) {
 		fseek(outfile, 32 * i + 32, SEEK_SET);
 		// Write the file descriptor
 		fwrite(fileentries[i], sizeof(ccffile), 1, outfile);
-		// Jump to the end of the file so we can pad it to a multiple of the block size of 32 bytes
-		fseek(outfile, 0, SEEK_END);
-		int end = ftell(outfile);
-		for(j = 0; j < 32 - (end % 32); j++) { //pad out to next block
-			fwrite(&ZERO, 1, 1, outfile);
+		if (files - 1 > i) {
+			// Jump to the end of the file so we can pad it to a multiple of the block size of 32 bytes
+			fseek(outfile, 0, SEEK_END);
+			int end = ftell(outfile);
+			for(j = 0; j < 32 - (end % 32); j++) { //pad out to next block
+				fwrite(&ZERO, 1, 1, outfile);
+			}
 		}
 		free(indata);
 		free(outdata);
