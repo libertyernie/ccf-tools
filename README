@@ -2,22 +2,15 @@ Wii Virtual Console 'CCF' archiver/extractor suite
 by paulguy/aeduo (paulguy one one nine at gmail dot com)  released under Public 
 Domain, but I ask that you give credit if you use any of the code.
 
-Tweaks made by libertyernie (2021-03-14) (these are public domain also).
-
-This package contains these files:
+The repository contains these files:
 README - this readme
 ccfex.c - CCF extractor source
 ccfarc.c - CCF archiver source
-ccfex - CCF extractor linux binary
-ccfarc - CCF archiver linux binary
-ccfex.exe - CCF extractor Windows binary
-ccfarc.exe - CCF archiver Windows binary
-
-The Windows program might work out of the box, but it might require zlib1.dll in 
-it's own directory or your path.
+dotnet - Visual Studio 2019 solution/project files
 
 This program should compile easily on any system, since all it uses is standard C 
-libraries and zlib.  The command should be something like:
+libraries and zlib (and even zlib can be replaced, see below).
+The command should be something like:
 
 gcc -lz -o ccfex ccfex.c
 
@@ -43,3 +36,24 @@ to store those files to out.ccf.
 
 If you're using a file manager, you should be able to just drag the files in to 
 the executable and have it act on them just the same.
+
+----------------------------------------
+
+This new (2021) version by libertyernie makes a few changes:
+
+* Filenames in the header no longer have extra data written after their null
+  terminator
+* Padding to 32 bytes (the default block size) is no longer performed on the
+  last file in the archive
+* `uint32_t` type used when appropriate
+* `ccfarcraw` added, a variant of `ccfarc` which does not attempt to perform
+  any LZ77 compression (necessary for Virtual Console `misc.ccf`) - just
+  compile ccfarc.c with preprocessor definition `CCF_ARCHIVE_UNCOMPRESSED`
+* Visual Studio 2019 solution added
+    * `ccfarc` and `ccfex` can now be compiled with C++/CLI, replacing zlib
+    with .NET Framework 4.7.2's DeflateStream and custom calculation of the
+    checksum (this can simplify setup of the build environment on Windows, at
+    the cost of adding a dependency on .NET)
+
+Note that these tools are only designed to run in a little-endian environment
+(they won't work properly on a Wii, for example).

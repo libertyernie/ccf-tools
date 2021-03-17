@@ -2,3 +2,12 @@
 *.exe
 ccfex
 ccfarc
+!ccfex/
+!ccfarc/
+
+.vs
+Debug/
+Release/
+*.user
+
+*.ccf

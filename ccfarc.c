@@ -2,7 +2,18 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+#ifdef CCF_ARCHIVE_UNCOMPRESSED
+#else
+#ifdef __cplusplus_cli
+using namespace System;
+using namespace System::IO;
+using namespace System::IO::Compression;
+using namespace System::Runtime::InteropServices;
+#else
 #include "zlib.h"
+#endif
+#endif
 
 const int ZERO = 0;
 
@@ -28,16 +39,29 @@ int main(int argc, char **argv) {
 	FILE *infile, *outfile;
 	int retval;
 	uint32_t files, size, curpos, i, j;
-	char *indata, *outdata;
+	unsigned char *indata, *outdata;
+	uint32_t inbufsize, outbufsize;
 
 	// Ensure that there is an argument
 	if(argc < 2) {
-		fprintf(stderr, "USAGE: ccfex <infile1> [infile2] ...\n");
+#ifdef CCF_ARCHIVE_UNCOMPRESSED
+		fprintf(stderr, "USAGE: ccfarcraw <infile1> [infile2] ...\n");
+#else
+		fprintf(stderr, "USAGE: ccfarc <infile1> [infile2] ...\n");
+#endif
 		return(EXIT_FAILURE);
 	}
 
 	// Open output file stream
-	fprintf(stderr, "Beginning compression of out.ccf.\n");
+#ifdef CCF_ARCHIVE_UNCOMPRESSED
+	fprintf(stderr, "Beginning uncompressed archival of out.ccf.\n");
+#else
+#ifdef __cplusplus_cli
+	fprintf(stderr, "Beginning compression of out.ccf using .NET.\n");
+#else
+	fprintf(stderr, "Beginning compression of out.ccf using zlib.\n");
+#endif
+#endif
 	outfile = fopen("out.ccf", "wb");
 	if(outfile == NULL) {
 		fprintf(stderr, "File out.ccf couldn't be opened.\n");
@@ -96,13 +120,15 @@ int main(int argc, char **argv) {
 	for(i = 0; i < files; i++) {
 		fprintf(stderr, ".");
 		// Copy the input data to memory
-		indata = (char *)malloc(sizeof(char) * fileentries[i]->filesize);
+		inbufsize = fileentries[i]->filesize;
+		indata = (unsigned char *)malloc(inbufsize);
 		if(indata == NULL) {
 			fprintf(stderr, "Couldn't allocate enough memory!\n");
 			return(EXIT_FAILURE);
 		}
 		// Create a place for the output data to go
-		outdata = (char *)malloc(sizeof(char) * fileentries[i]->datasize);
+		outbufsize = fileentries[i]->datasize;
+		outdata = (unsigned char *)malloc(outbufsize);
 		if(outdata == NULL) {
 			fprintf(stderr, "Couldn't allocate enough memory!\n");
 			return(EXIT_FAILURE);
@@ -120,6 +146,46 @@ int main(int argc, char **argv) {
 
 		// Retrieve the buffer size
 		long datasize = (long)fileentries[i]->datasize;
+
+#ifdef CCF_ARCHIVE_UNCOMPRESSED
+		datasize = inbufsize;
+		memcpy(outdata, indata, datasize);
+#else
+#ifdef __cplusplus_cli
+		{
+			// Create input and output streams pointing to unmanaged memory
+			// Streams will be flushed and disposed once out of scope
+			UnmanagedMemoryStream inputStream(indata, inbufsize, inbufsize, FileAccess::Read);
+			UnmanagedMemoryStream outputStream(outdata, outbufsize, outbufsize, FileAccess::Write);
+
+			// Write zlib header
+			outputStream.WriteByte(0x78);
+			outputStream.WriteByte(0x9C);
+
+			{
+				// Compress data using DEFLATE algorithm
+				// DeflateStream will be flushed and disposed once out of scope
+				DeflateStream compressor(%outputStream, CompressionMode::Compress, true);
+				inputStream.CopyTo(%compressor);
+			}
+
+			// Compute adler32 checksum
+			uint32_t a = 1, b = 0;
+			for (uint8_t* ptr = indata; ptr < indata + inbufsize; ptr++) {
+				a = (a + *ptr) % 65521;
+				b = (b + a) % 65521;
+			}
+			uint32_t checksum = b << 16 | a;
+
+			// Write checksum in big endian
+			outputStream.WriteByte((checksum & 0xFF000000) >> 24);
+			outputStream.WriteByte((checksum & 0x00FF0000) >> 16);
+			outputStream.WriteByte((checksum & 0x0000FF00) >> 8);
+			outputStream.WriteByte((checksum & 0x000000FF) >> 0);
+
+			datasize = outputStream.Position;
+		}
+#else
 		// Perform compression, telling zlib to put the correct compressed size into the "datasize" variable
 		retval = compress(outdata, &datasize, indata, fileentries[i]->filesize);
 		switch(retval) {
@@ -135,6 +201,8 @@ int main(int argc, char **argv) {
 				fprintf(stderr, "The compressed data is corrupted.\n");
 				return(EXIT_FAILURE);
 		}
+#endif
+#endif
 
 		// Copy the actual compressed data size to the CCF file descriptor
 		if (datasize > 0xFFFFFFFF) {

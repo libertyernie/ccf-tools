@@ -2,7 +2,15 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+#ifdef __cplusplus_cli
+using namespace System;
+using namespace System::IO;
+using namespace System::IO::Compression;
+using namespace System::Runtime::InteropServices;
+#else
 #include "zlib.h"
+#endif
 
 #define MAGIC (0x00464343)
 #define ZLIB_CHUNK
@@ -27,7 +35,11 @@ int main(int argc, char **argv) {
 	}
 
 	// Open the file stream
-	fprintf(stderr, "Beginning extraction of %s.\n", argv[1]);
+#ifdef __cplusplus_cli
+	fprintf(stderr, "Beginning extraction of %s using .NET.\n", argv[1]);
+#else
+	fprintf(stderr, "Beginning extraction of %s using zlib.\n", argv[1]);
+#endif
 	FILE *infile = fopen(argv[1], "rb");
 	if(infile == NULL) {
 		fprintf(stderr, "File %s couldn't be opened.\n", argv[1]);
@@ -74,7 +86,7 @@ int main(int argc, char **argv) {
 		fprintf(stderr, "%u  %s  %u %u %u\n", i, temp, fileentries[i]->offset, fileentries[i]->datasize, fileentries[i]->filesize);
 	}
 
-	char *databuffer, *filebuffer;
+	unsigned char *databuffer, *filebuffer;
 	int retval;
 	FILE *outfile;
 	for(i = 0; i < filecount; i++) {
@@ -89,15 +101,49 @@ int main(int argc, char **argv) {
 		// Jump to the beginning of the data for this file in the input stream
 		fseek(infile, fileentries[i]->offset * chunksize, SEEK_SET);
 		// Copy compressed data to a memory buffer capable of holding it
-		databuffer = (char *)malloc(sizeof(char) * fileentries[i]->datasize);
+		databuffer = (unsigned char*)malloc(fileentries[i]->datasize);
 		fread(databuffer, 1, fileentries[i]->datasize, infile);
 		if(fileentries[i]->filesize == fileentries[i]->datasize) {
 			// Uncompressed data - copy to output stream
 			fwrite(databuffer, 1, fileentries[i]->datasize, outfile);
 		} else {
 			// Uncompress the data
-			filebuffer = (char *)malloc(sizeof(char) * fileentries[i]->filesize);
+			filebuffer = (unsigned char*)malloc(fileentries[i]->filesize);
 			long size = fileentries[i]->filesize;
+
+#ifdef __cplusplus_cli
+			if (databuffer[0] != 0x78 || databuffer[1] != 0x9C) {
+				fprintf(stderr, "zlib header (789C) not found at beginning of compressed data.\n");
+				return(EXIT_FAILURE);
+			}
+
+			{
+				// Create input and output streams pointing to unmanaged memory
+				// Streams will be flushed and disposed once out of scope
+				UnmanagedMemoryStream inputStream(databuffer + 2, fileentries[i]->datasize - 6, fileentries[i]->datasize - 6, FileAccess::Read);
+				UnmanagedMemoryStream outputStream(filebuffer, fileentries[i]->filesize, fileentries[i]->filesize, FileAccess::Write);
+
+				DeflateStream decompressor(%inputStream, CompressionMode::Decompress);
+				decompressor.CopyTo(%outputStream);
+			}
+
+			// Verify adler32 checksum
+			uint32_t a = 1, b = 0;
+			for (uint8_t* ptr = filebuffer; ptr < filebuffer + fileentries[i]->filesize; ptr++) {
+				a = (a + *ptr) % 65521;
+				b = (b + a) % 65521;
+			}
+			uint32_t checksum = b << 16 | a;
+			uint8_t* checksum_location = databuffer + fileentries[i]->datasize - 4;
+			bool checksum_match = (checksum & 0xFF000000) >> 24 == checksum_location[0]
+				&& (checksum & 0x00FF0000) >> 16 == checksum_location[1]
+				&& (checksum & 0x0000FF00) >> 8 == checksum_location[2]
+				&& (checksum & 0x000000FF) >> 0 == checksum_location[3];
+			if (!checksum_match) {
+				fprintf(stderr, "Alder-32 checksum for compressed data does not match.\n");
+				return(EXIT_FAILURE);
+			}
+#else
 			retval = uncompress(filebuffer, &size, databuffer, fileentries[i]->datasize);
 			switch(retval) {
 				case Z_OK:
@@ -112,6 +158,8 @@ int main(int argc, char **argv) {
 					fprintf(stderr, "The compressed data is corrupted.\n");
 					return(EXIT_FAILURE);
 			}
+#endif
+
 			// Write the uncompressed data to the output stream
 			fwrite(filebuffer, 1, size, outfile);
 			free(filebuffer);
