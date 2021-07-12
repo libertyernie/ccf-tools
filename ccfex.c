@@ -30,6 +30,7 @@ typedef struct ccffile {
 int main(int argc, char **argv) {
 	// Ensure that there is an argument
 	if(argc < 2) {
+		fprintf(stderr, "ccfex 20210711\n");
 		fprintf(stderr, "USAGE: ccfex <ccffile>\n");
 		return(EXIT_FAILURE);
 	}
@@ -50,8 +51,8 @@ int main(int argc, char **argv) {
 	uint32_t magic, chunksize, filecount, i;
 	// A list of file descriptors
 	ccffile **fileentries;
-	// A buffer on the stack for reading filenames from the file descriptor that will always have a null terminator after 20 characters
-	char temp[21] = "                    ";
+	// A buffer on the stack for reading filenames from the file descriptor
+	char temp[23] = "                    __";
 	// Verify the header (C, C, F, 0x00)
 	fread(&magic, 4, 1, infile);
 	if(magic != MAGIC) {
